@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Turn-Based Chess Game</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #eee;
+      font-family: Arial, sans-serif;
+    }
+
+    #turn-indicator {
+      font-size: 20px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    #chessboard {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      border: 2px solid #333;
+      margin-top: 20px;
+    }
+
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 32px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .white { background-color: #f0d9b5; }
+    .black { background-color: #b58863; }
+
+    .captured {
+      margin-top: 10px;
+      font-size: 24px;
+    }
+
+    .captured span {
+      margin: 0 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2 id="turn-indicator">Turn: White</h2>
+
+  <h3>Captured Pieces</h3>
+  <div class="captured">White: <span id="captured-white"></span></div>
+  <div class="captured">Black: <span id="captured-black"></span></div>
+  <div id="chessboard"></div>
+
+  <script>
+    const board = document.getElementById("chessboard");
+    const capturedWhite = document.getElementById("captured-white");
+    const capturedBlack = document.getElementById("captured-black");
+    const turnIndicator = document.getElementById("turn-indicator");
+
+    let currentTurn = "white";
+
+    const pieces = {
+      white: ["♖", "♘", "♗", "♕", "♔", "♗", "♘", "♖"],
+      black: ["♜", "♞", "♝", "♛", "♚", "♝", "♞", "♜"]
+    };
+
+    function createBoard() {
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const square = document.createElement("div");
+          square.className = `square ${(row + col) % 2 === 0 ? "white" : "black"}`;
+          square.dataset.row = row;
+          square.dataset.col = col;
+          square.ondrop = drop;
+          square.ondragover = allowDrop;
+
+          if (row === 0)
+            square.innerHTML = `<span draggable="true" ondragstart="drag(event)" data-color="black">${pieces.black[col]}</span>`;
+          if (row === 1)
+            square.innerHTML = `<span draggable="true" ondragstart="drag(event)" data-color="black">♟</span>`;
+          if (row === 6)
+            square.innerHTML = `<span draggable="true" ondragstart="drag(event)" data-color="white">♙</span>`;
+          if (row === 7)
+            square.innerHTML = `<span draggable="true" ondragstart="drag(event)" data-color="white">${pieces.white[col]}</span>`;
+
+          board.appendChild(square);
+        }
+      }
+    }
+
+    function allowDrop(ev) {
+      ev.preventDefault();
+    }
+
+    function drag(ev) {
+      const color = ev.target.getAttribute("data-color");
+      if (color !== currentTurn) {
+        ev.preventDefault();
+        return;
+      }
+      ev.dataTransfer.setData("text", ev.target.innerHTML);
+      ev.dataTransfer.setData("color", color);
+      ev.dataTransfer.setData("piece", ev.target.textContent);
+      ev.target.parentNode.setAttribute("data-drag-source", "true");
+    }
+
+    function drop(ev) {
+      ev.preventDefault();
+      const piece = ev.dataTransfer.getData("piece");
+      const color = ev.dataTransfer.getData("color");
+      const data = ev.dataTransfer.getData("text");
+
+      const sourceSquare = document.querySelector('[data-drag-source="true"]');
+      const fromRow = parseInt(sourceSquare.dataset.row);
+      const fromCol = parseInt(sourceSquare.dataset.col);
+
+      const target = ev.target.tagName === "SPAN" ? ev.target.parentNode : ev.target;
+      const toRow = parseInt(target.dataset.row);
+      const toCol = parseInt(target.dataset.col);
+
+      if (!isValidMove(fromRow, fromCol, toRow, toCol, piece, color)) {
+        alert("Invalid move!");
+        sourceSquare.removeAttribute("data-drag-source");
+        return;
+      }
+
+      const capturedPiece = target.innerText;
+      if (capturedPiece) {
+        const capturedColor = target.firstChild.getAttribute("data-color");
+        if (capturedColor === "white") {
+          capturedWhite.innerHTML += `<span>${capturedPiece}</span>`;
+        } else {
+          capturedBlack.innerHTML += `<span>${capturedPiece}</span>`;
+        }
+      }
+
+      target.innerHTML = `<span draggable="true" ondragstart="drag(event)" data-color="${color}">${data}</span>`;
+      sourceSquare.innerHTML = "";
+      sourceSquare.removeAttribute("data-drag-source");
+
+      currentTurn = currentTurn === "white" ? "black" : "white";
+      turnIndicator.innerText = `Turn: ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}`;
+    }
+
+    function isValidMove(fr, fc, tr, tc, piece, color) {
+      const dr = tr - fr;
+      const dc = tc - fc;
+      const absDr = Math.abs(dr);
+      const absDc = Math.abs(dc);
+
+      const target = document.querySelector(`[data-row="${tr}"][data-col="${tc}"]`);
+      if (target.innerHTML && target.firstChild.getAttribute("data-color") === color) return false;
+
+      switch (piece) {
+        case "♙": case "♟": {
+          const direction = color === "white" ? -1 : 1;
+          const startRow = color === "white" ? 6 : 1;
+
+          if (dc === 0 && dr === direction && !target.innerHTML) return true;
+          if (dc === 0 && dr === 2 * direction && fr === startRow && !target.innerHTML) return true;
+          if (absDc === 1 && dr === direction && target.innerHTML) return true;
+
+          return false;
+        }
+        case "♖": case "♜":
+          return (dr === 0 || dc === 0) && isPathClear(fr, fc, tr, tc);
+        case "♗": case "♝":
+          return absDr === absDc && isPathClear(fr, fc, tr, tc);
+        case "♕": case "♛":
+          return (dr === 0 || dc === 0 || absDr === absDc) && isPathClear(fr, fc, tr, tc);
+        case "♘": case "♞":
+          return (absDr === 2 && absDc === 1) || (absDr === 1 && absDc === 2);
+        case "♔": case "♚":
+          return absDr <= 1 && absDc <= 1;
+        default:
+          return false;
+      }
+    }
+
+    function isPathClear(fr, fc, tr, tc) {
+      const dr = Math.sign(tr - fr);
+      const dc = Math.sign(tc - fc);
+      let r = fr + dr, c = fc + dc;
+      while (r !== tr || c !== tc) {
+        const midSquare = document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+        if (midSquare.innerHTML) return false;
+        r += dr;
+        c += dc;
+      }
+      return true;
+    }
+
+    createBoard();
+  </script>
+</body>
+</html>
